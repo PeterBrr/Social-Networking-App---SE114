@@ -1,6 +1,8 @@
 package com.example.lucincin;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
@@ -20,6 +22,10 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class FindFriendsActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor> {
 
@@ -42,7 +48,8 @@ public class FindFriendsActivity extends AppCompatActivity implements LoaderMana
         rvContacts.setAdapter(contactAdapter);
 
         // 2. Bắt đầu kiểm tra quyền
-        checkPermissionAndLoadContacts();
+        // checkPermissionAndLoadContacts(); // Uncomment if you want to load local contacts
+        loadFriendsFromServer();
     }
 
     private void checkPermissionAndLoadContacts() {
@@ -109,5 +116,58 @@ public class FindFriendsActivity extends AppCompatActivity implements LoaderMana
     public void onLoaderReset(@NonNull Loader<Cursor> loader) {
         // Khi loader bị reset (ví dụ app bị thu nhỏ/đóng), xóa trắng danh sách
         contactAdapter.setContacts(new ArrayList<>());
+    }
+
+    private void loadFriendsFromServer() {
+        // 1. Lấy ID người dùng đang đăng nhập
+        SharedPreferences sharedPref = getSharedPreferences("LucincinApp", Context.MODE_PRIVATE);
+        int myUserId = sharedPref.getInt("USER_ID", -1);
+
+        if (myUserId == -1) {
+            Toast.makeText(this, "Lỗi xác thực người dùng!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 2. Gọi API
+        RetrofitClient.getApiService().getUserFriends(myUserId).enqueue(new Callback<FriendsResponse>() {
+            @Override
+            public void onResponse(Call<FriendsResponse> call, Response<FriendsResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    FriendsResponse friendsResponse = response.body();
+
+                    if ("success".equals(friendsResponse.getStatus())) {
+                        List<User> serverFriends = friendsResponse.getFriends();
+
+                        // 3. Chuyển đổi dữ liệu từ User sang ContactItem để dùng lại Adapter cũ
+                        List<ContactItem> displayList = new ArrayList<>();
+                        if (serverFriends != null) {
+                            for (User u : serverFriends) {
+                                // Lấy Tên và Số điện thoại (nếu có) từ User
+                                String name = u.getName() != null ? u.getName() : "Người dùng ẩn danh";
+                                String phone = u.getPhone() != null ? u.getPhone() : "Chưa cập nhật số điện thoại";
+
+                                displayList.add(new ContactItem(name, phone));
+                            }
+                        }
+
+                        // 4. Đẩy dữ liệu vào Adapter và vẽ lên RecyclerView
+                        // Giả sử biến adapter của bạn tên là contactAdapter
+                        contactAdapter.setContacts(displayList);
+
+                        Toast.makeText(getApplicationContext(), "Đã tải " + friendsResponse.getCount() + " bạn bè!", Toast.LENGTH_SHORT).show();
+
+                    } else {
+                        Toast.makeText(getApplicationContext(), "Lỗi: " + friendsResponse.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    Toast.makeText(getApplicationContext(), "Lỗi Server: " + response.code(), Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<FriendsResponse> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Lỗi mạng: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

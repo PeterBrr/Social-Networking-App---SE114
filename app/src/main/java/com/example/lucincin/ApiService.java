@@ -22,6 +22,9 @@ public interface ApiService {
     @GET("/api/users/emails")
     Call<List<String>> getAllUserEmails();
 
+    @GET("/api/users/{user_id}/friends")
+    Call<FriendsResponse> getUserFriends(@Path("user_id") int userId);
+
     @GET("/api/users/{user_id}/profile")
     Call<UserResponse> getUserProfile(@Path("user_id") int userId);
 
